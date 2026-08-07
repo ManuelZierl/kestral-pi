@@ -1,0 +1,213 @@
+{
+  "format_version": 1,
+  "id": "com.ma-zierl.kestral-pi",
+  "version": "0.1.2",
+  "display_name": "Agent Engine (pi)",
+  "description": "Runs multi-turn pi agents while routing every model and tool call through Kestral permissions.",
+  "publisher": {
+    "name": "Kestral"
+  },
+  "license": "MIT",
+  "min_host_version": "0.1.0-alpha.1",
+  "manifest": {
+    "capabilities": [
+      {
+        "name": "agent.run",
+        "description": "Run a bounded multi-turn agent over the caller's granted capabilities.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "messages": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object"
+              }
+            },
+            "system_prompt": {
+              "type": "string"
+            },
+            "profile": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "reasoning": {
+              "type": "string"
+            },
+            "temperature": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "max_output_tokens": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "max_turns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10
+            },
+            "max_payload_bytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_duration_secs": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "tools": {
+              "type": "object",
+              "properties": {
+                "exclude_providers": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "uniqueItems": true
+                },
+                "allow_capabilities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 3
+                  },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            },
+            "progress": {
+              "type": "boolean"
+            },
+            "cancellation": {
+              "type": "boolean"
+            },
+            "recursion_guard": {
+              "type": "boolean"
+            },
+            "credential_isolation": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "messages"
+          ],
+          "additionalProperties": false
+        },
+        "effect": "external-write",
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "reasoning": {
+              "type": "string"
+            },
+            "finish_reason": {
+              "enum": [
+                "stop",
+                "max-turns",
+                "cancelled",
+                "failed"
+              ]
+            },
+            "turns": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failure_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "text",
+            "finish_reason",
+            "turns"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "config_declarations": [
+      {
+        "name": "agent",
+        "title": "Agent engine limits",
+        "description": "Host-enforced maximum duration for an agent run.",
+        "json_schema": {
+          "type": "object",
+          "properties": {
+            "max_duration_secs": {
+              "type": "integer",
+              "minimum": 60,
+              "maximum": 3600
+            }
+          },
+          "required": [
+            "max_duration_secs"
+          ],
+          "additionalProperties": false
+        },
+        "default": {
+          "max_duration_secs": 600
+        }
+      }
+    ],
+    "artifact_types": [
+      {
+        "name": "agent-transcript",
+        "description": "Complete model and tool transcript from an agent run.",
+        "json_schema": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    ]
+  },
+  "consumer_grant_requests": [
+    {
+      "holder": "chat",
+      "request": {
+        "scope": {
+          "kind": "exact-capability",
+          "provider": "com.ma-zierl.kestral-pi",
+          "capability": "agent.run"
+        },
+        "data_scope": {
+          "kind": "none"
+        },
+        "condition": "silent",
+        "reason": "Let Chat delegate conversations to the installed pi agent engine.",
+        "duration": {
+          "kind": "non-expiring"
+        }
+      }
+    }
+  ],
+  "backend": {
+    "kind": "agent-worker",
+    "authority_mode": "unsandboxed",
+    "protocol_version": 1,
+    "entry": "backend/worker.mjs"
+  },
+  "data": {
+    "kind": "none"
+  },
+  "integrity": {
+    "algorithm": "sha256",
+    "assets": {
+      "backend/worker.mjs": "sha256-d273c45068572f284b11beda7c72338a8a7db90c468129b5983e563eafc56651",
+      "backend/THIRD-PARTY-NOTICES.txt": "sha256-19ce62c63535ff38498a90ca0ed16a12bdbe5130969eb0643806bc0e5d1925f0"
+    }
+  }
+}

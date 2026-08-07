@@ -1,0 +1,125 @@
+name: Release evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_package_digest:
+        description: Canonical Kestral package digest for dist/
+        required: true
+        type: string
+      source_commit:
+        description: Exact lowercase 40-hex app source commit that produced dist/
+        required: true
+        type: string
+      host_version:
+        description: Kestral host version used for the manual lifecycle run
+        required: true
+        type: string
+      host_commit:
+        description: Full Kestral host commit used for the manual lifecycle run
+        required: true
+        type: string
+      tauri_tested:
+        description: Confirm that the exact package and host were tested in a real Tauri run
+        required: true
+        type: boolean
+      observations:
+        description: JSON object from the required manual lifecycle observations
+        required: true
+        type: string
+      release_tag:
+        description: New, unused GitHub release tag for this evidence asset
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Validate source commit input
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "source_commit must be a lowercase 40-hex commit" >&2
+            exit 1
+          fi
+      - name: Check out the exact app source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.source_commit }}
+      - name: Record checked out source HEAD
+        id: source
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          set -euo pipefail
+          head=$(git rev-parse HEAD)
+          test "$head" = "$SOURCE_COMMIT"
+          test "$head" = "$GITHUB_SHA"
+          echo "sha=$head" >> "$GITHUB_OUTPUT"
+      - name: Check out the pinned Kestral package contract
+        uses: actions/checkout@v6
+        with:
+          repository: ManuelZierl/kestral
+          ref: 82a983a268911e7a1958b4c6eab06dde334070b1
+          path: .kestral-contract
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run schema -- .kestral-contract/schemas/app.schema.json dist/app.json
+      - run: npm run package:digest
+      - run: npm run reproducibility
+      - run: npm run notices
+      - name: Require reproducible checked-in package and synchronized notices
+        run: git diff --exit-code -- dist THIRD-PARTY-NOTICES.txt
+      - name: Require identical notice copies
+        run: cmp --silent THIRD-PARTY-NOTICES.txt dist/backend/THIRD-PARTY-NOTICES.txt
+      - name: Require real Tauri lifecycle testing
+        env:
+          TAURI_TESTED: ${{ inputs.tauri_tested }}
+        run: test "$TAURI_TESTED" = true
+      - name: Generate lifecycle evidence
+        env:
+          EXPECTED_PACKAGE_DIGEST: ${{ inputs.expected_package_digest }}
+          HOST_VERSION: ${{ inputs.host_version }}
+          HOST_COMMIT: ${{ inputs.host_commit }}
+          TAURI_TESTED: ${{ inputs.tauri_tested }}
+          EXPECTED_APP_ID: com.ma-zierl.kestral-pi
+          EXPECTED_REPOSITORY: https://github.com/ManuelZierl/kestral-pi
+          OBSERVATIONS_JSON: ${{ inputs.observations }}
+          RELEASE_EVIDENCE_OUTPUT: ${{ runner.temp }}/RELEASE-EVIDENCE.json
+        run: node scripts/release-evidence.mjs --observations-env OBSERVATIONS_JSON
+      - name: Publish a new non-overwriting release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EVIDENCE_PATH: ${{ runner.temp }}/RELEASE-EVIDENCE.json
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+            echo "release tag is malformed: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release tag already exists: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --refs origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "release tag already exists remotely: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          version=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+          asset="kestral-pi-${version}-release-evidence-${SOURCE_SHA}.json"
+          gh release create "$RELEASE_TAG" "$EVIDENCE_PATH#$asset" \
+            --target "$SOURCE_SHA" \
+            --title "Kestral Pi lifecycle evidence ${version}" \
+            --notes "Attestation generated after manual Kestral lifecycle testing. This workflow validates the recorded observations, package identity, agent-worker contract, and canonical digest; it does not run Kestral or Tauri lifecycle tests."

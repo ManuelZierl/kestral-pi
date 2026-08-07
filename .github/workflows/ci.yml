@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out the pinned Kestral package contract
+        uses: actions/checkout@v6
+        with:
+          repository: ManuelZierl/kestral
+          ref: 82a983a268911e7a1958b4c6eab06dde334070b1
+          path: .kestral-contract
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run schema -- .kestral-contract/schemas/app.schema.json dist/app.json
+      - run: npm run reproducibility
+      - run: npm run package:digest
+      - run: npm run notices
+      - name: Require reproducible checked-in package and synchronized notices
+        run: git diff --exit-code -- dist THIRD-PARTY-NOTICES.txt
+      - name: Require identical notice copies
+        run: cmp --silent THIRD-PARTY-NOTICES.txt dist/backend/THIRD-PARTY-NOTICES.txt
+      - name: Require a clean immutable source commit
+        run: test -z "$(git status --porcelain --untracked-files=all)"
