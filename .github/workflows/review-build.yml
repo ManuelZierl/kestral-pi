@@ -30,10 +30,27 @@ jobs:
         with:
           node-version: 22.19.0
           cache: npm
+      - name: Apply only the compatible fast-uri security patch
+        run: |
+          set -euo pipefail
+          cp package-lock.json "$RUNNER_TEMP/review-lock-before.json"
+          npm update fast-uri --package-lock-only --ignore-scripts --no-audit --no-fund
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          const before = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/review-lock-before.json`, 'utf8'));
+          const after = JSON.parse(readFileSync('package-lock.json', 'utf8'));
+          const path = 'node_modules/fast-uri';
+          assert.equal(after.packages[path].version, '3.1.6');
+          for (const key of new Set([...Object.keys(before.packages), ...Object.keys(after.packages)])) {
+            if (key !== path) assert.deepEqual(after.packages[key], before.packages[key], `unexpected lock change: ${key}`);
+          }
+          assert.deepEqual({ ...after, packages: undefined }, { ...before, packages: undefined });
+          NODE
+          git diff --exit-code -- package.json
+          git diff -- package-lock.json
       - run: npm ci
-      - name: Record advisory details for review
-        run: npm audit --json
-        continue-on-error: true
+      - run: npm audit --audit-level=high
       - run: npm run check
       - run: npm test
       - run: npm run schema -- .kestral-contract/schemas/app.schema.json dist/app.json
@@ -41,14 +58,14 @@ jobs:
       - run: npm run package:digest
       - run: npm run notices
       - run: cmp --silent THIRD-PARTY-NOTICES.txt dist/backend/THIRD-PARTY-NOTICES.txt
-      - name: Commit only the validated generated package to the review branch
+      - name: Commit the validated lockfile and generated package to the review branch
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = refs/heads/fix/deep-review-2026-09-09
-          git add -- dist THIRD-PARTY-NOTICES.txt
+          git add -- package-lock.json dist THIRD-PARTY-NOTICES.txt
           if ! git diff --cached --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m "build: regenerate reviewed worker with Node 22.19"
+            git commit -m "fix(deps): patch fast-uri and rebuild the validated worker"
             git push origin HEAD:refs/heads/fix/deep-review-2026-09-09
           fi
