@@ -14,7 +14,7 @@ function packagePaths(document) {
 
   const assets = Object.keys(assetsObject);
   if (assets.includes("app.json")) throw new Error("integrity assets must not contain app.json");
-  const caseFolded = new Set(["app.json"]);
+  const caseFolded = new Set();
   const paths = new Set(["app.json", ...assets]);
   for (const path of paths) {
     if (
@@ -27,7 +27,8 @@ function packagePaths(document) {
       throw new Error(`unsafe package path '${path}'`);
     }
     const folded = path.toLowerCase();
-    if (!caseFolded.add(folded)) throw new Error(`case-colliding package path '${path}'`);
+    if (caseFolded.has(folded)) throw new Error(`case-colliding package path '${path}'`);
+    caseFolded.add(folded);
   }
   // Rust's BTreeSet orders the UTF-8 path bytes; do not use JavaScript's
   // UTF-16 string ordering for non-ASCII package paths.
@@ -35,11 +36,20 @@ function packagePaths(document) {
 }
 
 async function regularFile(packageDirectory, path) {
-  const filePath = join(packageDirectory, path);
-  const metadata = await lstat(filePath).catch((error) => {
-    throw new Error(`read package file '${path}' failed: ${error.message}`);
-  });
-  if (!metadata.isFile()) throw new Error(`package entry '${path}' is not a regular file`);
+  const parts = path.split("/");
+  let filePath = packageDirectory;
+  for (let index = 0; index < parts.length; index += 1) {
+    filePath = join(filePath, parts[index]);
+    const metadata = await lstat(filePath).catch((error) => {
+      throw new Error(`read package file '${path}' failed: ${error.message}`);
+    });
+    // lstat only on the leaf would still follow symlinked parent directories.
+    if (index < parts.length - 1) {
+      if (!metadata.isDirectory()) throw new Error(`package path '${path}' contains an entry that is not a directory`);
+    } else if (!metadata.isFile()) {
+      throw new Error(`package entry '${path}' is not a regular file`);
+    }
+  }
   return readFile(filePath);
 }
 
