@@ -41,7 +41,7 @@ jobs:
           const before = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/review-lock-before.json`, 'utf8'));
           const after = JSON.parse(readFileSync('package-lock.json', 'utf8'));
           const path = 'node_modules/fast-uri';
-          assert.equal(after.packages[path].version, '3.1.6');
+          assert.equal(after.packages[path].version, '3.1.7');
           for (const key of new Set([...Object.keys(before.packages), ...Object.keys(after.packages)])) {
             if (key !== path) assert.deepEqual(after.packages[key], before.packages[key], `unexpected lock change: ${key}`);
           }
