@@ -97,6 +97,13 @@ export async function runAgent(command: AgentRunCommand, bridge: AgentHostBridge
     if (signal.aborted) throw new Error("agent request cancelled");
     const transcript = toHostMessages(context.messages);
     const last = [...context.messages].reverse().find((message): message is AssistantMessage => message.role === "assistant");
+    // Protocol v1 has no successful "length" result. Do not label a cut-off
+    // final answer as "stop". Pi may still recover truncated tool calls while
+    // there are turns left; an exhausted tool loop remains "max-turns".
+    if (last?.stopReason === "length" && !stoppedAtTurnLimit) {
+      emit({ type: "failed", request_id: command.request_id, code: "model-truncated", message: "Model output reached its token limit before completing the answer." });
+      return;
+    }
     const reasoning = assistantReasoning(last);
     emit({
       type: "completed",
