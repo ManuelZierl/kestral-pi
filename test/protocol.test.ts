@@ -7,7 +7,7 @@ test("protocol rejects unknown fields", () => {
 });
 
 test("agent run validates turn bounds", () => {
-  assert.throws(() => parseCommand({ command: "agent-run", request_id: "r", messages: [{ role: "user", content: "hi" }], tools: [], max_turns: 51 }), /between 1 and 50/);
+  assert.throws(() => parseCommand({ command: "agent-run", request_id: "r", messages: [{ role: "user", content: "hi" }], tools: [], max_turns: 11 }), /between 1 and 10/);
 });
 
 test("protocol rejects malformed nested messages and tool results", () => {
