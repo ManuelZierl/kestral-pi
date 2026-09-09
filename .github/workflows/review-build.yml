@@ -1,0 +1,51 @@
+name: Review build
+
+on:
+  push:
+    branches: [fix/deep-review-2026-09-09]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kestral-pi-deep-review-build
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    if: github.repository == 'ManuelZierl/kestral-pi'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check out the pinned Kestral package contract
+        uses: actions/checkout@v6
+        with:
+          repository: ManuelZierl/kestral
+          ref: 82a983a268911e7a1958b4c6eab06dde334070b1
+          path: .kestral-contract
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run schema -- .kestral-contract/schemas/app.schema.json dist/app.json
+      - run: npm run reproducibility
+      - run: npm run package:digest
+      - run: npm run notices
+      - run: cmp --silent THIRD-PARTY-NOTICES.txt dist/backend/THIRD-PARTY-NOTICES.txt
+      - name: Commit only the validated generated package to the review branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/fix/deep-review-2026-09-09
+          git add -- dist THIRD-PARTY-NOTICES.txt
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m "build: regenerate reviewed worker with Node 22.19"
+            git push origin HEAD:refs/heads/fix/deep-review-2026-09-09
+          fi
