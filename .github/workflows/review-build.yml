@@ -31,6 +31,9 @@ jobs:
           node-version: 22.19.0
           cache: npm
       - run: npm ci
+      - name: Record advisory details for review
+        run: npm audit --json
+        continue-on-error: true
       - run: npm run check
       - run: npm test
       - run: npm run schema -- .kestral-contract/schemas/app.schema.json dist/app.json
