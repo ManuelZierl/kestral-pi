@@ -206,7 +206,7 @@
   "integrity": {
     "algorithm": "sha256",
     "assets": {
-      "backend/worker.mjs": "sha256-d273c45068572f284b11beda7c72338a8a7db90c468129b5983e563eafc56651",
+      "backend/worker.mjs": "sha256-521716955f174204fb338e28e13198db237760c43b17139964ee91287125fbf0",
       "backend/THIRD-PARTY-NOTICES.txt": "sha256-19ce62c63535ff38498a90ca0ed16a12bdbe5130969eb0643806bc0e5d1925f0"
     }
   }
