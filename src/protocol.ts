@@ -69,7 +69,7 @@ const object = (value: unknown, label: string): Record<string, unknown> => {
 
 const exactKeys = (value: Record<string, unknown>, allowed: readonly string[]): void => {
   const unknown = Object.keys(value).find((key) => !allowed.includes(key));
-  if (unknown) throw new ProtocolError("invalid-command", `unknown field ${unknown}`);
+  if (unknown !== undefined) throw new ProtocolError("invalid-command", `unknown field ${unknown}`);
 };
 
 const string = (value: unknown, label: string, maximum = 16_384): string => {
@@ -82,8 +82,8 @@ const text = (value: unknown, label: string, maximum = 2 * 1024 * 1024): string 
   return value;
 };
 
-const optionalString = (value: unknown, label: string): void => {
-  if (value !== undefined) string(value, label);
+const optionalText = (value: unknown, label: string): void => {
+  if (value !== undefined) text(value, label, 16_384);
 };
 
 function validateToolCall(value: unknown): string {
@@ -145,7 +145,7 @@ function validateLlmResponse(value: unknown): void {
   const raw = object(value, "LLM response");
   exactKeys(raw, ["message", "reasoning", "finish_reason"]);
   if (validateMessage(raw.message) !== "assistant") throw new ProtocolError("invalid-command", "LLM response message must be assistant");
-  optionalString(raw.reasoning, "reasoning");
+  optionalText(raw.reasoning, "reasoning");
   const finishReason = string(raw.finish_reason, "finish_reason", 64);
   if (!["stop", "length", "tool_calls"].includes(finishReason)) throw new ProtocolError("invalid-command", `unsupported finish_reason ${finishReason}`);
   const message = raw.message as Record<string, unknown>;
@@ -173,15 +173,15 @@ export function parseCommand(value: unknown): HostCommand {
     if (lastConversationRole !== "user" && lastConversationRole !== "tool") throw new ProtocolError("invalid-command", "messages must end with a user or tool message");
     const toolNames = raw.tools.map(validateTool);
     if (new Set(toolNames).size !== toolNames.length) throw new ProtocolError("invalid-command", "tool names must be unique");
-    optionalString(raw.system_prompt, "system_prompt");
-    optionalString(raw.model, "model");
-    optionalString(raw.reasoning, "reasoning");
-    if (!Number.isInteger(raw.max_turns) || Number(raw.max_turns) < 1 || Number(raw.max_turns) > 50) throw new ProtocolError("invalid-command", "max_turns must be between 1 and 50");
+    optionalText(raw.system_prompt, "system_prompt");
+    if (raw.model !== undefined) string(raw.model, "model");
+    optionalText(raw.reasoning, "reasoning");
+    if (!Number.isInteger(raw.max_turns) || Number(raw.max_turns) < 1 || Number(raw.max_turns) > 10) throw new ProtocolError("invalid-command", "max_turns must be between 1 and 10");
   } else if (command === "tool-result") {
     exactKeys(raw, [...common, "target_request_id", "tool_call_id", "outcome", "content"]);
     string(raw.target_request_id, "target_request_id", 128);
     string(raw.tool_call_id, "tool_call_id", 128);
-    if (!["completed", "refused", "failed"].includes(String(raw.outcome))) throw new ProtocolError("invalid-command", "invalid tool outcome");
+    if (typeof raw.outcome !== "string" || !["completed", "refused", "failed"].includes(raw.outcome)) throw new ProtocolError("invalid-command", "invalid tool outcome");
     text(raw.content, "tool result content");
   } else if (command === "llm-completed") {
     exactKeys(raw, [...common, "call_id", "response"]);
