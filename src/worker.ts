@@ -1,6 +1,9 @@
 import { clearAmbientEnvironment, assertSupportedRuntime } from "./runtime.ts";
-import { runWorker } from "./runner.ts";
 
 assertSupportedRuntime();
 clearAmbientEnvironment();
-await runWorker();
+// ESM static imports execute before the module body. Load provider/agent code
+// only after removing ambient credentials, including in the bundled worker.
+const { runAgent } = await import("./agent-service.ts");
+const { runWorker } = await import("./runner.ts");
+await runWorker(runAgent);
