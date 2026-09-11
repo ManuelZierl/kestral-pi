@@ -39,7 +39,7 @@ function environment() {
 function packageDocument(backend = EXPECTED_BACKEND) {
   return {
     id: APP_ID,
-    version: "0.1.2",
+    version: "0.1.3",
     backend,
     data: { kind: "none" },
     manifest: {
@@ -54,7 +54,7 @@ async function fixture(backend = EXPECTED_BACKEND) {
   const root = await mkdtemp(join(tmpdir(), "kestral-pi-release-evidence-"));
   await mkdir(join(root, "dist", "backend"), { recursive: true });
   await writeFile(join(root, "dist", "backend", "worker.mjs"), "export {};\n");
-  await writeFile(join(root, "package.json"), JSON.stringify({ name: "kestral-pi-worker", version: "0.1.2" }));
+  await writeFile(join(root, "package.json"), JSON.stringify({ name: "kestral-pi-worker", version: "0.1.3" }));
   await writeFile(join(root, "dist", "app.json"), JSON.stringify(packageDocument(backend)));
   return root;
 }
@@ -101,7 +101,7 @@ test("accepts the declared agent-worker package and records its contract", async
     "run",
     "source",
   ]);
-  assert.deepEqual(evidence.app, { id: APP_ID, version: "0.1.2" });
+  assert.deepEqual(evidence.app, { id: APP_ID, version: "0.1.3" });
   assert.equal(evidence.source.clean, true);
   assert.equal(evidence.package.digest, await packageDigest(join(root, "dist")));
   assert.deepEqual(evidence.package, { digest: await packageDigest(join(root, "dist")) });

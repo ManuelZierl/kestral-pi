@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "id": "com.ma-zierl.kestral-pi",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "display_name": "Agent Engine (pi)",
   "description": "Runs multi-turn pi agents while routing every model and tool call through Kestral permissions.",
   "publisher": {
@@ -206,7 +206,7 @@
   "integrity": {
     "algorithm": "sha256",
     "assets": {
-      "backend/worker.mjs": "sha256-d273c45068572f284b11beda7c72338a8a7db90c468129b5983e563eafc56651",
+      "backend/worker.mjs": "sha256-521716955f174204fb338e28e13198db237760c43b17139964ee91287125fbf0",
       "backend/THIRD-PARTY-NOTICES.txt": "sha256-19ce62c63535ff38498a90ca0ed16a12bdbe5130969eb0643806bc0e5d1925f0"
     }
   }

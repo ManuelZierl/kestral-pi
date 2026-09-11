@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,7 +14,7 @@ function packagePaths(document) {
 
   const assets = Object.keys(assetsObject);
   if (assets.includes("app.json")) throw new Error("integrity assets must not contain app.json");
-  const caseFolded = new Set(["app.json"]);
+  const caseFolded = new Set();
   const paths = new Set(["app.json", ...assets]);
   for (const path of paths) {
     if (
@@ -27,7 +27,8 @@ function packagePaths(document) {
       throw new Error(`unsafe package path '${path}'`);
     }
     const folded = path.toLowerCase();
-    if (!caseFolded.add(folded)) throw new Error(`case-colliding package path '${path}'`);
+    if (caseFolded.has(folded)) throw new Error(`case-colliding package path '${path}'`);
+    caseFolded.add(folded);
   }
   // Rust's BTreeSet orders the UTF-8 path bytes; do not use JavaScript's
   // UTF-16 string ordering for non-ASCII package paths.
@@ -35,12 +36,52 @@ function packagePaths(document) {
 }
 
 async function regularFile(packageDirectory, path) {
-  const filePath = join(packageDirectory, path);
-  const metadata = await lstat(filePath).catch((error) => {
-    throw new Error(`read package file '${path}' failed: ${error.message}`);
-  });
-  if (!metadata.isFile()) throw new Error(`package entry '${path}' is not a regular file`);
+  const parts = path.split("/");
+  let filePath = packageDirectory;
+  for (let index = 0; index < parts.length; index += 1) {
+    filePath = join(filePath, parts[index]);
+    const metadata = await lstat(filePath).catch((error) => {
+      throw new Error(`read package file '${path}' failed: ${error.message}`);
+    });
+    // lstat only on the leaf would still follow symlinked parent directories.
+    if (index < parts.length - 1) {
+      if (!metadata.isDirectory()) throw new Error(`package path '${path}' contains an entry that is not a directory`);
+    } else if (!metadata.isFile()) {
+      throw new Error(`package entry '${path}' is not a regular file`);
+    }
+  }
   return readFile(filePath);
+}
+
+async function validateSourceTree(packageDirectory, declaredPaths) {
+  const actual = new Set();
+
+  async function walk(directory, prefix = "") {
+    const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
+      throw new Error(`read package directory failed: ${error.message}`);
+    });
+    for (const entry of entries) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const path = join(directory, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`package symlinks are unsupported: ${relative}`);
+      if (entry.isDirectory()) {
+        await walk(path, relative);
+      } else if (entry.isFile()) {
+        actual.add(relative);
+      } else {
+        throw new Error(`unsupported package file type: ${relative}`);
+      }
+    }
+  }
+
+  await walk(packageDirectory);
+  actual.delete("app.signature.json");
+  const declared = new Set(declaredPaths);
+  const extra = [...actual].filter((path) => !declared.has(path)).sort();
+  const missing = [...declared].filter((path) => !actual.has(path)).sort();
+  if (extra.length > 0 || missing.length > 0) {
+    throw new Error(`package file declaration mismatch; extra=${JSON.stringify(extra)}, missing=${JSON.stringify(missing)}`);
+  }
 }
 
 /**
@@ -56,8 +97,10 @@ export async function packageDigest(packageDirectory) {
     throw new Error(`invalid app.json: ${error.message}`);
   }
 
+  const paths = packagePaths(document);
+  await validateSourceTree(root, paths);
   const hasher = createHash("sha256");
-  for (const path of packagePaths(document)) {
+  for (const path of paths) {
     const bytes = path === "app.json" ? appBytes : await regularFile(root, path);
     const pathBytes = Buffer.from(path, "utf8");
     const pathLength = Buffer.alloc(8);
