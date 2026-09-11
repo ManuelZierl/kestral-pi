@@ -28,7 +28,7 @@ test("digest does not follow an intermediate directory symlink", async (t) => {
   t.after(() => rm(outside, { recursive: true, force: true }));
   await writeFile(join(outside, "worker.mjs"), "outside package");
   await symlink(outside, join(root, "backend"), process.platform === "win32" ? "junction" : "dir");
-  await assert.rejects(packageDigest(root), /not a directory|symbolic link/);
+  await assert.rejects(packageDigest(root), /not a directory|symbolic link|package symlinks/);
 });
 
 test("digest still accepts ordinary nested regular files", async (t) => {
@@ -36,4 +36,20 @@ test("digest still accepts ordinary nested regular files", async (t) => {
   await mkdir(join(root, "backend"));
   await writeFile(join(root, "backend", "worker.mjs"), "worker");
   assert.match(await packageDigest(root), /^sha256-[0-9a-f]{64}$/);
+});
+
+test("digest rejects undeclared regular files", async (t) => {
+  const root = await fixture(t, {});
+  await writeFile(join(root, "undeclared.txt"), "not in integrity assets");
+  await assert.rejects(packageDigest(root), /package file declaration mismatch.*undeclared\.txt/);
+});
+
+test("digest rejects undeclared symlinks", async (t) => {
+  const root = await fixture(t, {});
+  const outside = await mkdtemp(join(tmpdir(), "pi-digest-outside-"));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const target = join(outside, "outside.txt");
+  await writeFile(target, "outside");
+  await symlink(target, join(root, "undeclared-link"), "file");
+  await assert.rejects(packageDigest(root), /package symlinks are unsupported.*undeclared-link/);
 });

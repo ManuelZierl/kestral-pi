@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -53,6 +53,37 @@ async function regularFile(packageDirectory, path) {
   return readFile(filePath);
 }
 
+async function validateSourceTree(packageDirectory, declaredPaths) {
+  const actual = new Set();
+
+  async function walk(directory, prefix = "") {
+    const entries = await readdir(directory, { withFileTypes: true }).catch((error) => {
+      throw new Error(`read package directory failed: ${error.message}`);
+    });
+    for (const entry of entries) {
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const path = join(directory, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`package symlinks are unsupported: ${relative}`);
+      if (entry.isDirectory()) {
+        await walk(path, relative);
+      } else if (entry.isFile()) {
+        actual.add(relative);
+      } else {
+        throw new Error(`unsupported package file type: ${relative}`);
+      }
+    }
+  }
+
+  await walk(packageDirectory);
+  actual.delete("app.signature.json");
+  const declared = new Set(declaredPaths);
+  const extra = [...actual].filter((path) => !declared.has(path)).sort();
+  const missing = [...declared].filter((path) => !actual.has(path)).sort();
+  if (extra.length > 0 || missing.length > 0) {
+    throw new Error(`package file declaration mismatch; extra=${JSON.stringify(extra)}, missing=${JSON.stringify(missing)}`);
+  }
+}
+
 /**
  * Match host/src-tauri/src/package.rs::package_digest exactly.
  */
@@ -66,8 +97,10 @@ export async function packageDigest(packageDirectory) {
     throw new Error(`invalid app.json: ${error.message}`);
   }
 
+  const paths = packagePaths(document);
+  await validateSourceTree(root, paths);
   const hasher = createHash("sha256");
-  for (const path of packagePaths(document)) {
+  for (const path of paths) {
     const bytes = path === "app.json" ? appBytes : await regularFile(root, path);
     const pathBytes = Buffer.from(path, "utf8");
     const pathLength = Buffer.alloc(8);

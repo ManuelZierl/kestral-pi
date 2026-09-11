@@ -9,7 +9,9 @@ It does not require a Kestral source checkout.
 
 Build and test with **Node.js 22.19.0** and npm 10 or newer. The CI job pins
 Node.js 22.19.0; other Node 22 releases are not publication-validation
-environments.
+environments. The installable app is supported on Kestral's Windows x86_64 and
+Linux x86_64 alpha releases; Kestral supplies its packaged Node runtime, so end
+users do not install Node separately.
 
 ```sh
 npm ci
@@ -72,3 +74,13 @@ surface-state envelopes are distinct host concerns and do not change that
 declaration. Worker requests, callback state, and transient transcripts exist
 only in invocation-scoped memory. Package and dependency downloads are build or
 host activity, not app-owned data retained by the engine.
+
+Disable stops the worker and removes its active capability and Chat grant while
+retaining host-owned configuration. Uninstall can retain or purge that config;
+the app has no app-owned data or secrets to purge. Historical Runs and transcript
+artifacts remain governed by Kestral's provenance retention. The immutable
+`v0.1.2` package is the predecessor for the `0.1.3` update test.
+
+Manuel Zierl maintains this repository. Report ordinary defects through
+[GitHub Issues](https://github.com/ManuelZierl/kestral-pi/issues) and
+security-sensitive defects through [private vulnerability reporting](https://github.com/ManuelZierl/kestral-pi/security/advisories/new).

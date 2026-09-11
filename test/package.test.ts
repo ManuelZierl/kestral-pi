@@ -10,7 +10,7 @@ test("package declares the narrowed agent contract and matching worker integrity
   const sourceNotices = await readFile(new URL("../THIRD-PARTY-NOTICES.txt", import.meta.url));
   const agent = app.manifest.capabilities.find((capability: { name: string }) => capability.name === "agent.run");
 
-  assert.equal(app.version, "0.1.2");
+  assert.equal(app.version, "0.1.3");
   assert.equal(
     app.min_host_version,
     "0.1.0-alpha.1",
